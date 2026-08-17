@@ -80,15 +80,21 @@ def fetch_sets():
 
 
 def fetch_set_cards(set_id):
-    data = _get(f'{POKEMONTCG_BASE}/cards', params={'q': f'set.id:{set_id}', 'pageSize': 250})
-    cards = []
-    for c in data.get('data', []):
-        card, _ = Card.objects.update_or_create(
-            api_id=c['id'],
-            defaults=_api_card_to_db(c),
-        )
-        cards.append(CardSerializer(card).data)
-    return cards
+    try:
+        data = _get(f'{POKEMONTCG_BASE}/cards', params={'q': f'set.id:{set_id}', 'pageSize': 250})
+        cards = []
+        for c in data.get('data', []):
+            card, _ = Card.objects.update_or_create(
+                api_id=c['id'],
+                defaults=_api_card_to_db(c),
+            )
+            cards.append(CardSerializer(card).data)
+        return cards
+    except requests.RequestException:
+        cached = Card.objects.filter(set_id=set_id).order_by('number')
+        if cached.exists():
+            return [CardSerializer(c).data for c in cached]
+        raise
 
 
 def search_cards(query, set_id='', page=1, page_size=20):
