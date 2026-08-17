@@ -105,7 +105,7 @@ def fetch_set_cards(set_id):
         cached = Card.objects.filter(set_id=set_id).order_by('number')
         if cached.exists():
             return [CardSerializer(c).data for c in cached]
-        raise
+        return []
 
 
 def search_cards(query, set_id='', page=1, page_size=20):
