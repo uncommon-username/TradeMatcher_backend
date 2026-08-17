@@ -93,14 +93,7 @@ def fetch_sets():
 def fetch_set_cards(set_id):
     try:
         data = _get(f'{POKEMONTCG_BASE}/cards', params={'q': f'set.id:{set_id}', 'pageSize': 250})
-        cards = []
-        for c in data.get('data', []):
-            card, _ = Card.objects.update_or_create(
-                api_id=c['id'],
-                defaults=_api_card_to_db(c),
-            )
-            cards.append(CardSerializer(card).data)
-        return cards
+        return _cache_cards(data.get('data', []))
     except requests.RequestException:
         cached = Card.objects.filter(set_id=set_id).order_by('number')
         if cached.exists():
@@ -125,12 +118,7 @@ def search_cards(query, set_id='', page=1, page_size=20):
             )
             batch = data.get('data', [])
             total = data.get('totalCount', 0)
-            for c in batch:
-                card, _ = Card.objects.update_or_create(
-                    api_id=c['id'],
-                    defaults=_api_card_to_db(c),
-                )
-                all_cards.append(CardSerializer(card).data)
+            all_cards.extend(_cache_cards(batch))
             if len(all_cards) >= total or not batch or len(all_cards) >= 500:
                 break
             page_index += 1
@@ -199,6 +187,29 @@ def _api_card_to_db(c):
         'image_small': c.get('image_small', ''),
         'image_large': c.get('image_large', ''),
     }
+
+
+def _cache_cards(api_cards):
+    """Bulk-upsert API cards, returning serialized cards from the DB."""
+    if not api_cards:
+        return []
+    objs = []
+    for c in api_cards:
+        objs.append(Card(api_id=c['id'], **_api_card_to_db(c)))
+    ids = [o.api_id for o in objs]
+    existing_ids = set(
+        Card.objects.filter(api_id__in=ids).values_list('api_id', flat=True)
+    )
+    to_create = [o for o in objs if o.api_id not in existing_ids]
+    if to_create:
+        Card.objects.bulk_create(to_create, ignore_conflicts=True)
+    to_update = [o for o in objs if o.api_id in existing_ids]
+    if to_update:
+        Card.objects.bulk_update(
+            to_update,
+            ['name', 'set_id', 'set_name', 'number', 'rarity', 'image_small', 'image_large'],
+        )
+    return CardSerializer(Card.objects.filter(api_id__in=ids), many=True).data
 
 
 def apply_exchange(offer):
