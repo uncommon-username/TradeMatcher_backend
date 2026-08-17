@@ -41,18 +41,29 @@ def _set_to_dict(s):
 
 
 def _cache_sets(sets):
+    existing = {s.api_id: s for s in PokemonSet.objects.all()}
+    to_create = []
+    to_update = []
     for s in sets:
-        PokemonSet.objects.update_or_create(
-            api_id=s['id'],
-            defaults={
-                'name': s['name'],
-                'series': s['series'],
-                'release_date': s['release_date'],
-                'total': s['total'],
-                'logo_url': s['logo_url'],
-                'symbol_url': s['symbol_url'],
-            },
-        )
+        defaults = {
+            'name': s['name'],
+            'series': s['series'],
+            'release_date': s['release_date'],
+            'total': s['total'],
+            'logo_url': s['logo_url'],
+            'symbol_url': s['symbol_url'],
+        }
+        obj = existing.get(s['id'])
+        if obj is not None:
+            for field, value in defaults.items():
+                setattr(obj, field, value)
+            to_update.append(obj)
+        else:
+            to_create.append(PokemonSet(api_id=s['id'], **defaults))
+    if to_update:
+        PokemonSet.objects.bulk_update(to_update, fields=list(defaults))
+    if to_create:
+        PokemonSet.objects.bulk_create(to_create)
 
 
 def fetch_sets():
