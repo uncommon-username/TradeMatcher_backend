@@ -18,7 +18,7 @@ def _get(url, params=None, retries=3):
     last_error = None
     for attempt in range(retries):
         try:
-            resp = requests.get(url, params=params, headers=_headers(), timeout=15)
+            resp = requests.get(url, params=params, headers=_headers(), timeout=5)
             resp.raise_for_status()
             return resp.json()
         except requests.RequestException as exc:
